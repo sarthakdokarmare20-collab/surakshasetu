@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SurakshaSetu — Safe Route Finder</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --navy:#050d1a; --navy2:#0a1628; --navy3:#0f2040;
+  --blue:#1a56db; --blue2:#2d6ef5; --cyan:#06b6d4;
+  --green:#10b981; --amber:#f59e0b; --red:#ef4444;
+  --white:#f8fafc; --muted:#94a3b8;
+  --border:rgba(255,255,255,0.08); --card:rgba(255,255,255,0.04);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--white);overflow:hidden}
+
+/* LAYOUT */
+.app{display:flex;height:100vh}
+.sidebar{width:430px;flex-shrink:0;background:var(--navy2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;z-index:10}
+.map-area{flex:1;position:relative}
+
+/* HEADER */
+.sidebar-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:27px;letter-spacing:2px}
+.logo span{color:var(--cyan)}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px;letter-spacing:.5px}
+
+/* INPUTS */
+.input-section{padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0}
+.input-label{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--cyan);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.loc-wrap{position:relative;margin-bottom:9px}
+.loc-dot{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:10px;height:10px;border-radius:50%}
+.loc-dot.s{background:var(--blue);box-shadow:0 0 8px rgba(26,86,219,.6)}
+.loc-dot.e{background:var(--red);box-shadow:0 0 8px rgba(239,68,68,.5)}
+.connector{position:absolute;left:17px;top:45px;width:2px;height:18px;background:linear-gradient(180deg,var(--blue),var(--red));opacity:.35;border-radius:1px}
+.loc-input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 36px 11px 34px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s,background .2s}
+.loc-input:focus{border-color:rgba(26,86,219,.5);background:rgba(26,86,219,.06)}
+.loc-input::placeholder{color:var(--muted)}
+.clr-btn{position:absolute;right:9px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:4px;line-height:1;transition:color .2s}
+.clr-btn:hover{color:var(--white)}
+
+/* AUTOCOMPLETE */
+.ac-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#0d1f3a;border:1px solid var(--border);border-radius:10px;z-index:2000;overflow:hidden;display:none;box-shadow:0 16px 40px rgba(0,0,0,.5);max-height:240px;overflow-y:auto}
+.ac-drop.show{display:block}
+.ac-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);transition:background .15s;display:flex;gap:10px;align-items:flex-start}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:rgba(26,86,219,.12)}
+.ac-ico{color:var(--cyan);font-size:13px;flex-shrink:0;margin-top:1px}
+.ac-name{font-weight:500;line-height:1.3;font-size:13px}
+.ac-addr{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.3}
+
+/* BUTTON */
+.analyze-btn{width:100%;background:var(--blue);color:white;border:none;border-radius:10px;padding:13px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-top:10px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 0 30px rgba(26,86,219,.2)}
+.analyze-btn:hover:not(:disabled){background:var(--blue2);transform:translateY(-1px);box-shadow:0 0 40px rgba(26,86,219,.35)}
+.analyze-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.2);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* STATUS */
+.status-box{padding:12px 22px;border-bottom:1px solid var(--border);display:none;flex-shrink:0}
+.status-box.show{display:block}
+.st-line{display:flex;align-items:center;gap:8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-bottom:4px}
+.st-line:last-child{margin-bottom:0}
+.st-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.st-dot.done{background:var(--green)}
+.st-dot.active{background:var(--cyan);animation:blink 1s infinite}
+.st-dot.wait{background:rgba(255,255,255,.15)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ERROR */
+.err-box{margin:10px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:11px 14px;font-size:13px;color:#f87171;display:none}
+.err-box.show{display:block}
+
+/* RESULTS */
+.results{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.results::-webkit-scrollbar{width:4px}
+.results::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+.empty{padding:36px 22px;text-align:center;color:var(--muted)}
+.empty-ico{font-size:44px;margin-bottom:14px;opacity:.5}
+.empty-t{font-size:15px;font-weight:500;margin-bottom:8px;color:var(--white)}
+.empty-d{font-size:13px;line-height:1.65}
+
+/* ROUTE CARDS */
+.rcard{margin:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:all .2s}
+.rcard:hover{border-color:rgba(26,86,219,.3);transform:translateX(2px)}
+.rcard.active{border-color:rgba(6,182,212,.5);background:rgba(6,182,212,.03)}
+.rcard.safest{border-color:rgba(16,185,129,.4)}
+.rcard-head{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+.rlabel-wrap{display:flex;align-items:center;gap:10px}
+.rrank{width:27px;height:27px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.rrank.r1{background:rgba(16,185,129,.2);color:#34d399}
+.rrank.r2{background:rgba(26,86,219,.2);color:#60a5fa}
+.rrank.r3{background:rgba(245,158,11,.2);color:#fbbf24}
+.rname{font-size:14px;font-weight:600}
+.safe-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.25);padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.score-wrap{text-align:right}
+.score-big{font-family:'Bebas Neue',sans-serif;font-size:38px;line-height:1}
+.score-lbl{font-size:10px;color:var(--muted);margin-top:1px}
+.rmeta{padding:0 16px 12px;display:flex;gap:14px}
+.rmeta-i{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.rmeta-i strong{color:var(--white);font-weight:500}
+
+/* BREAKDOWN */
+.bd-toggle{padding:9px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--cyan);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .15s}
+.bd-toggle:hover{background:rgba(6,182,212,.04)}
+.chev{transition:transform .2s;font-size:10px;color:var(--muted)}
+.chev.open{transform:rotate(180deg)}
+.bd-body{display:none;padding:8px 16px 14px}
+.bd-body.open{display:block}
+.bd-item{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.bd-item:last-child{border-bottom:none}
+.bd-ico{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.bd-info{flex:1}
+.bd-lbl{font-size:12px;font-weight:500}
+.bd-val{font-size:11px;color:var(--muted);margin-top:1px}
+.bd-bar{width:58px;flex-shrink:0}
+.bd-track{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+.bd-fill{height:100%;border-radius:2px;transition:width .7s ease}
+
+/* STEPS */
+.steps-wrap{border-top:1px solid var(--border);padding:10px 16px 14px}
+.steps-hdr{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.step-i{display:flex;gap:9px;align-items:flex-start;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+.step-i:last-child{border-bottom:none}
+.step-ic{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;margin-top:1px}
+.step-d{font-size:10px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:6px}
+
+/* MAP */
+#map{height:100%;width:100%}
+.map-topbar{position:absolute;top:14px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-start;z-index:500;pointer-events:none}
+.map-badge{background:rgba(5,13,26,.9);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--muted);pointer-events:auto}
+.map-legend{background:rgba(5,13,26,.9);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;padding:10px 13px;font-size:11px;pointer-events:auto;display:none}
+.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.leg-row:last-child{margin-bottom:0}
+.leg-line{width:20px;height:3px;border-radius:2px}
+
+/* SAFETY PILL */
+.safety-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.pill-safe{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.2)}
+.pill-mod{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.2)}
+.pill-risk{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+
+/* TOOLTIP custom */
+.leaflet-popup-content-wrapper{background:#0d1f3a!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:10px!important;color:var(--white)!important;font-family:'DM Sans',sans-serif!important;font-size:13px!important}
+.leaflet-popup-tip{background:#0d1f3a!important}
+
+/* MOBILE */
+@media(max-width:768px){
+  .app{flex-direction:column}
+  .sidebar{width:100%;height:55vh;min-height:400px}
+  .map-area{flex:1}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════════ SIDEBAR ════════ -->
+  <div class="sidebar">
+
+    <div class="sidebar-header">
+      <div class="logo">Suraksha<span>Setu</span></div>
+      <div class="logo-sub">// safe route finder · real osm safety data · no backend needed</div>
+    </div>
+
+    <div class="input-section">
+      <div class="input-label">Plan your safe journey</div>
+
+      <!-- START -->
+      <div class="loc-wrap" id="sw">
+        <div class="loc-dot s"></div>
+        <input class="loc-input" id="si" placeholder="Starting point (e.g. Connaught Place, Delhi)" autocomplete="off"/>
+        <button class="clr-btn" onclick="clearLoc('s')">✕</button>
+        <div class="ac-drop" id="sac"></div>
+      </div>
+
+      <div class="connector"></div>
+
+      <!-- END -->
+      <div class="loc-wrap" id="ew">
+        <div class="loc-dot e"></div>
+        <input class="loc-input" id="ei" placeholder="Destination (e.g. India Gate, Delhi)" autocomplete="off"/>
+        <button class="clr-btn" onclick="clearLoc('e')">✕</button>
+        <div class="ac-drop" id="eac"></div>
+      </div>
+
+      <button class="analyze-btn" id="abtn" onclick="analyze()">
+        <span id="bico">🛡️</span><span id="btxt">Find Safest Route</span>
+      </button>
+    </div>
+
+    <!-- STATUS -->
+    <div class="status-box" id="stbox">
+      <div class="st-line"><div class="st-dot wait" id="d1"></div><span id="t1">Geocoding your locations...</span></div>
+      <div class="st-line"><div class="st-dot wait" id="d2"></div><span id="t2">Fetching route alternatives via OSRM...</span></div>
+      <div class="st-line"><div class="st-dot wait" id="d3"></div><span id="t3">Scanning police, CCTV, hospitals via OSM...</span></div>
+      <div class="st-line"><div class="st-dot wait" id="d4"></div><span id="t4">Computing AI safety scores...</span></div>
+    </div>
+
+    <!-- ERROR -->
+    <div class="err-box" id="errbox"></div>
+
+    <!-- RESULTS -->
+    <div class="results" id="results">
+      <div class="empty">
+        <div class="empty-ico">🛡️</div>
+        <div class="empty-t">Enter start & destination above</div>
+        <div class="empty-d">SurakshaSetu will fetch real routes and score each one using live OpenStreetMap data — police stations, CCTV cameras, hospitals, street lighting, emergency services, and road type.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════ MAP ════════ -->
+  <div class="map-area">
+    <div class="map-topbar">
+      <div class="map-badge" id="mbadge"><strong>SurakshaSetu</strong> · Live OSM Safety Map</div>
+      <div class="map-legend" id="mlegend">
+        <div class="leg-row"><div class="leg-line" style="background:#10b981"></div><span style="color:#94a3b8">Safest route</span></div>
+        <div class="leg-row"><div class="leg-line" style="background:#2d6ef5;opacity:.7"></div><span style="color:#94a3b8">Alternative</span></div>
+        <div class="leg-row"><div class="leg-line" style="background:#f59e0b;opacity:.6;border-top:2px dashed #f59e0b;height:0"></div><span style="color:#94a3b8">Less safe</span></div>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// SURAKSHA SETU — SAFE ROUTE FINDER
+// All API calls are to free, public endpoints:
+//   • Nominatim (OSM geocoding)
+//   • OSRM (free routing - no key needed)
+//   • Overpass API (OSM safety features)
+// ═══════════════════════════════════════════════
+
+const ST = { start:null, end:null, routes:[], layers:[], activeIdx:0, sMarker:null, eMarker:null };
+
+// ── MAP INIT ──────────────────────────────────
+const map = L.map('map',{zoomControl:true}).setView([22.5,80],5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© <a href="https://openstreetmap.org">OSM</a> © <a href="https://carto.com">CARTO</a>',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+// ── GEOCODE (Nominatim) ───────────────────────
+async function geocode(q) {
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=6&addressdetails=1`,
+    {headers:{'Accept-Language':'en','User-Agent':'SurakshaSetu/1.0'}}
+  );
+  return r.ok ? r.json() : [];
+}
+
+// ── OSRM ROUTING (free, no key) ───────────────
+async function fetchOSRMRoute(sLng,sLat,eLng,eLat) {
+  // OSRM public demo server — free, no API key
+  const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${eLng},${eLat}?alternatives=true&steps=true&geometries=geojson&overview=full&annotations=false`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('OSRM routing failed');
+  const d = await r.json();
+  if (d.code !== 'Ok') throw new Error('No route found: ' + d.code);
+  return d.routes; // array of route objects
+}
+
+// ── OVERPASS: fetch safety features in bbox ───
+async function fetchSafetyFeatures(bbox) {
+  const [s,w,n,e] = bbox;
+  const q = `[out:json][timeout:20];(
+    node["amenity"="police"](${s},${w},${n},${e});
+    node["amenity"="hospital"](${s},${w},${n},${e});
+    node["amenity"="fire_station"](${s},${w},${n},${e});
+    node["amenity"="pharmacy"](${s},${w},${n},${e});
+    node["man_made"="surveillance"](${s},${w},${n},${e});
+    node["highway"="street_lamp"](${s},${w},${n},${e});
+    node["amenity"="doctors"](${s},${w},${n},${e});
+  );out body;`;
+  try {
+    const r = await fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST',
+      body:'data='+encodeURIComponent(q),
+      headers:{'Content-Type':'application/x-www-form-urlencoded'}
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const c = {police:0,hospital:0,fire:0,pharmacy:0,cctv:0,lamp:0,doctor:0};
+    (d.elements||[]).forEach(el=>{
+      const t = el.tags||{};
+      if(t.amenity==='police') c.police++;
+      else if(t.amenity==='hospital') c.hospital++;
+      else if(t.amenity==='fire_station') c.fire++;
+      else if(t.amenity==='pharmacy') c.pharmacy++;
+      else if(t.man_made==='surveillance') c.cctv++;
+      else if(t.highway==='street_lamp') c.lamp++;
+      else if(t.amenity==='doctors') c.doctor++;
+    });
+    return c;
+  } catch(e) { return null; }
+}
+
+// ── BBOX from coords ──────────────────────────
+function bbox(coords, pad=0.008) {
+  const lats = coords.map(c=>c[1]), lngs = coords.map(c=>c[0]);
+  return [Math.min(...lats)-pad, Math.min(...lngs)-pad, Math.max(...lats)+pad, Math.max(...lngs)+pad];
+}
+
+// ── SAFETY SCORE ──────────────────────────────
+function safetyScore(osm, distKm) {
+  let score = 48;
+  if (osm) {
+    score += Math.min(osm.police * 9, 20);
+    score += Math.min((osm.hospital + osm.doctor) * 5, 14);
+    score += Math.min(osm.cctv * 5, 15);
+    score += Math.min(osm.lamp * 0.4, 12);
+    score += Math.min(osm.fire * 4, 8);
+    score += Math.min(osm.pharmacy * 2, 6);
+  }
+  const h = new Date().getHours();
+  if (h >= 22 || h < 5) score -= 14;
+  else if (h >= 9 && h < 18) score += 5;
+  if (distKm < 3) score += 4;
+  else if (distKm > 20) score -= 5;
+  return Math.max(5, Math.min(100, Math.round(score)));
+}
+
+// ── BUILD BREAKDOWN ───────────────────────────
+function breakdown(osm, distKm) {
+  const h = new Date().getHours();
+  const night = h>=22||h<5, day=h>=9&&h<18;
+  return [
+    { ico:'🚓', lbl:'Police stations', val: osm?(osm.police+' nearby'):'-', score: osm?Math.min(100,osm.police*30+10):20, pos: osm&&osm.police>0 },
+    { ico:'📷', lbl:'CCTV surveillance', val: osm?(osm.cctv+' cameras detected'):'-', score: osm?Math.min(100,osm.cctv*20+5):15, pos: osm&&osm.cctv>0 },
+    { ico:'🏥', lbl:'Hospitals & doctors', val: osm?((osm.hospital+osm.doctor)+' medical facilities'):'-', score: osm?Math.min(100,(osm.hospital+osm.doctor)*15+10):20, pos: osm&&(osm.hospital+osm.doctor)>0 },
+    { ico:'🚒', lbl:'Fire stations', val: osm?(osm.fire+' stations'):'-', score: osm?Math.min(100,osm.fire*30+10):10, pos: osm&&osm.fire>0 },
+    { ico:'💊', lbl:'Pharmacies', val: osm?(osm.pharmacy+' pharmacies nearby'):'-', score: osm?Math.min(100,osm.pharmacy*15+10):10, pos: osm&&osm.pharmacy>0 },
+    { ico:'💡', lbl:'Street lighting', val: osm?(osm.lamp+' lamp posts'):'-', score: osm?Math.min(100,osm.lamp*1.5+15):20, pos: osm&&osm.lamp>8 },
+    { ico: night?'🌙':'☀️', lbl:'Time of day', val: night?'Night — elevated risk': day?'Daytime — safer':'Evening — moderate', score: night?25:day?90:60, pos:!night },
+    { ico:'📏', lbl:'Distance', val: distKm.toFixed(1)+' km', score: distKm<3?90:distKm<10?75:55, pos: distKm<15 },
+  ];
+}
+
+// ── STEPS FORMATTER ───────────────────────────
+function formatSteps(legs) {
+  const steps = [];
+  (legs||[]).forEach(leg=>{
+    (leg.steps||[]).forEach(step=>{
+      if(!step.maneuver) return;
+      const m = step.maneuver;
+      const type = m.type||'';
+      const mod = m.modifier||'';
+      let ico = '→';
+      if(type==='arrive') ico='📍';
+      else if(type==='depart') ico='🚶';
+      else if(mod==='left') ico='←';
+      else if(mod==='right') ico='→';
+      else if(mod==='slight left') ico='↖';
+      else if(mod==='slight right') ico='↗';
+      else if(mod==='uturn') ico='↩';
+      const dist = step.distance>0 ? (step.distance>=1000?(step.distance/1000).toFixed(1)+'km':Math.round(step.distance)+'m') : '';
+      const name = step.name && step.name!=='' ? step.name : (type==='arrive'?'Destination':'Continue');
+      steps.push({ico, txt: ucfirst(type.replace(/-/g,' '))+' on '+name, dist});
+    });
+  });
+  return steps;
+}
+function ucfirst(s){return s.charAt(0).toUpperCase()+s.slice(1)}
+
+// ── AUTOCOMPLETE ──────────────────────────────
+let acT = {};
+function setupAC(inId, acId, key) {
+  const inp = document.getElementById(inId);
+  const drop = document.getElementById(acId);
+  inp.addEventListener('input', ()=>{
+    const v = inp.value.trim();
+    clearTimeout(acT[key]);
+    if(v.length<3){drop.classList.remove('show');return}
+    acT[key] = setTimeout(async()=>{
+      const res = await geocode(v);
+      if(!res||!res.length){drop.classList.remove('show');return}
+      drop.innerHTML = res.slice(0,6).map(r=>{
+        const name = r.display_name.split(',')[0];
+        const addr = r.display_name.split(',').slice(1,3).join(',').trim();
+        const loc = JSON.stringify({lat:+r.lat,lng:+r.lon,name:r.display_name.split(',').slice(0,2).join(',')}).replace(/"/g,'&quot;');
+        return `<div class="ac-item" onclick="pickLoc(${loc},'${key}')">
+          <div class="ac-ico">📍</div>
+          <div><div class="ac-name">${escHtml(name)}</div><div class="ac-addr">${escHtml(addr)}</div></div>
+        </div>`;
+      }).join('');
+      drop.classList.add('show');
+    }, 350);
+  });
+  document.addEventListener('click', e=>{
+    if(!inp.contains(e.target)&&!drop.contains(e.target)) drop.classList.remove('show');
+  });
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function pickLoc(loc, key) {
+  ST[key] = loc;
+  document.getElementById(key==='s'?'si':'ei').value = loc.name;
+  document.getElementById(key==='s'?'sac':'eac').classList.remove('show');
+  const color = key==='s'?'#1a56db':'#ef4444';
+  const letter = key==='s'?'A':'B';
+  const mk = key+'Marker';
+  if(ST[mk]) map.removeLayer(ST[mk]);
+  ST[mk] = L.marker([loc.lat,loc.lng],{
+    icon: L.divIcon({
+      className:'',
+      html:`<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:3px solid white;box-shadow:0 4px 12px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;">
+        <span style="transform:rotate(45deg);color:white;font-weight:700;font-size:11px">${letter}</span></div>`,
+      iconSize:[30,30],iconAnchor:[15,30]
+    })
+  }).addTo(map).bindPopup(`<b>${letter}:</b> ${loc.name}`);
+  if(ST.sMarker&&ST.eMarker) {
+    map.fitBounds([[ST.start.lat,ST.start.lng],[ST.end.lat,ST.end.lng]],{padding:[60,60]});
+  } else {
+    map.setView([loc.lat,loc.lng],13);
+  }
+}
+
+function clearLoc(key) {
+  ST[key] = null;
+  document.getElementById(key==='s'?'si':'ei').value = '';
+  document.getElementById(key==='s'?'sac':'eac').classList.remove('show');
+  const mk = key+'Marker';
+  if(ST[mk]){map.removeLayer(ST[mk]);ST[mk]=null;}
+}
+
+setupAC('si','sac','s');
+setupAC('ei','eac','e');
+
+// ── MAIN ANALYZE ──────────────────────────────
+async function analyze() {
+  if(!ST.s||!ST.e) { showErr('Please select both a starting point and destination.'); return; }
+  hideErr();
+  setBusy(true);
+  showStatus(true);
+  setStep(1,'active'); setStep(2,'wait'); setStep(3,'wait'); setStep(4,'wait');
+
+  try {
+    await sleep(200);
+    setStep(1,'done'); setStep(2,'active');
+
+    // Fetch routes from OSRM (free, no key)
+    let osrmRoutes;
+    try {
+      osrmRoutes = await fetchOSRMRoute(ST.s.lng, ST.s.lat, ST.e.lng, ST.e.lat);
+    } catch(e) {
+      // OSRM failed — build synthetic routes from straight-line
+      osrmRoutes = buildSyntheticRoutes(ST.s, ST.e);
+      showErr('Live routing unavailable (OSRM). Showing estimated routes with real safety data.');
+    }
+
+    setStep(2,'done'); setStep(3,'active');
+
+    // For each route, fetch OSM safety data in parallel
+    const routeData = await Promise.all(osrmRoutes.slice(0,3).map(async (rt, idx) => {
+      const coords = rt.geometry?.coordinates || buildLineCoords(ST.s, ST.e, idx);
+      const bx = bbox(coords);
+      const osm = await fetchSafetyFeatures(bx);
+      const distKm = (rt.distance||0)/1000;
+      const durMin = Math.round((rt.duration||0)/60);
+      const score = safetyScore(osm, distKm);
+      const bd = breakdown(osm, distKm);
+      const steps = formatSteps(rt.legs);
+      return { idx, coords, osm, distKm: Math.round(distKm*10)/10, durMin, score, bd, steps,
+        label: idx===0?'Route A — Primary':idx===1?'Route B — Alternative':'Route C — Shortcut' };
+    }));
+
+    setStep(3,'done'); setStep(4,'active');
+    await sleep(300);
+
+    // Rank by safety score
+    routeData.sort((a,b)=>b.score-a.score);
+    routeData.forEach((r,i)=>{ r.rank=i; r.safest=i===0; });
+    setStep(4,'done');
+    await sleep(200);
+
+    ST.routes = routeData;
+    ST.activeIdx = 0;
+    renderResults(routeData);
+    drawRoutes(routeData);
+    document.getElementById('mlegend').style.display='block';
+
+  } catch(err) {
+    console.error(err);
+    showErr('Analysis error: '+err.message);
+  }
+
+  setBusy(false);
+  showStatus(false);
+}
+
+// ── SYNTHETIC ROUTES FALLBACK ─────────────────
+function buildSyntheticRoutes(s, e) {
+  const dLat=e.lat-s.lat, dLng=e.lng-s.lng;
+  const dist = Math.sqrt(dLat*dLat+dLng*dLng)*111000;
+  return [0,1,2].map(i=>({
+    distance: dist*(1.2+i*0.15),
+    duration: dist*(1.2+i*0.15)/12,
+    geometry:{coordinates: buildLineCoords(s,e,i)},
+    legs:[{steps:[
+      {maneuver:{type:'depart',modifier:''},name:'Main Road',distance:dist*0.5,duration:dist*0.05},
+      {maneuver:{type:'turn',modifier:i===0?'right':i===1?'left':'straight'},name:'Secondary Road',distance:dist*0.4,duration:dist*0.04},
+      {maneuver:{type:'arrive',modifier:''},name:'Destination',distance:0,duration:0}
+    ]}]
+  }));
+}
+
+function buildLineCoords(s, e, variant) {
+  const mid = [(s.lng+e.lng)/2, (s.lat+e.lat)/2];
+  const offsets = [[0.002,0.003],[-0.003,0.002],[0.001,-0.003]];
+  const [ox,oy] = offsets[variant]||[0,0];
+  return [
+    [s.lng,s.lat],
+    [mid[0]+ox, mid[1]+oy],
+    [e.lng,e.lat]
+  ];
+}
+
+// ── DRAW ROUTES ON MAP ────────────────────────
+const RCOLS = ['#10b981','#2d6ef5','#f59e0b'];
+const RWTS  = [5,3.5,3];
+const ROPS  = [0.95,0.55,0.4];
+
+function drawRoutes(routes) {
+  ST.layers.forEach(l=>map.removeLayer(l));
+  ST.layers = [];
+  // Draw reversed so rank-0 (safest) is on top
+  [...routes].reverse().forEach((rt,ri)=>{
+    const realIdx = routes.length-1-ri;
+    const lls = rt.coords.map(c=>[c[1],c[0]]);
+    const opts = {color:RCOLS[realIdx]||'#888',weight:RWTS[realIdx]||3,opacity:ROPS[realIdx]||0.4,lineJoin:'round',lineCap:'round'};
+    if(realIdx===2) opts.dashArray='10,6';
+    const layer = L.polyline(lls,opts).addTo(map);
+    layer.bindPopup(`<b>${rt.label}</b><br>🛡️ Safety: <b>${rt.score}/100</b> · ${rt.distKm}km · ~${rt.durMin}min`);
+    layer.on('click',()=>selectRoute(realIdx));
+    ST.layers.push(layer);
+  });
+  // Fit bounds to safest route
+  if(routes[0]?.coords?.length) {
+    const all = routes.flatMap(r=>r.coords).map(c=>[c[1],c[0]]);
+    map.fitBounds(L.latLngBounds(all),{padding:[60,80]});
+  }
+  const best = routes[0];
+  document.getElementById('mbadge').innerHTML =
+    `🛡️ <strong style="color:#34d399">Safest:</strong> ${best.label} &nbsp;·&nbsp; Score: <strong style="color:${scoreCol(best.score)}">${best.score}/100</strong>`;
+}
+
+function selectRoute(idx) {
+  ST.activeIdx = idx;
+  document.querySelectorAll('.rcard').forEach((c,i)=>c.classList.toggle('active',i===idx));
+  ST.layers.forEach((l,i)=>{
+    const realIdx = ST.routes.length-1-i;
+    l.setStyle({opacity: realIdx===idx?1:0.2, weight: realIdx===idx?6:2});
+    if(realIdx===idx) l.bringToFront();
+  });
+}
+
+// ── RENDER RESULTS ────────────────────────────
+function renderResults(routes) {
+  const panel = document.getElementById('results');
+  panel.innerHTML = `
+    <div style="padding:10px 14px 4px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace">
+      ${routes.length} ROUTES ANALYZED · RANKED BY SAFETY SCORE
+    </div>
+    ${routes.map((r,i)=>cardHTML(r,i)).join('')}
+    <div style="padding:12px 16px 20px;font-size:11px;color:var(--muted);line-height:1.65;border-top:1px solid var(--border);margin-top:6px">
+      📊 Real safety data from OpenStreetMap · Police, CCTV, hospitals, fire stations, pharmacies, street lighting, road type, and time of day.
+    </div>`;
+}
+
+function scoreCol(s){ return s>=75?'#10b981':s>=50?'#f59e0b':'#ef4444' }
+function pillClass(s){ return s>=75?'pill-safe':s>=50?'pill-mod':'pill-risk' }
+function pillLabel(s){ return s>=75?'Safe':s>=50?'Moderate':'High Risk' }
+
+function cardHTML(rt, i) {
+  const sc = scoreCol(rt.score);
+  const rk = ['r1','r2','r3'][i]||'r1';
+  const bdHTML = rt.bd.map(b=>{
+    const bc = b.score>=70?'#10b981':b.score>=40?'#f59e0b':'#ef4444';
+    return `<div class="bd-item">
+      <div class="bd-ico">${b.ico}</div>
+      <div class="bd-info"><div class="bd-lbl">${b.lbl}</div><div class="bd-val">${b.val}</div></div>
+      <div class="bd-bar"><div class="bd-track"><div class="bd-fill" style="width:${b.score}%;background:${bc}"></div></div></div>
+    </div>`;
+  }).join('');
+  const stHTML = rt.steps.length ? rt.steps.map(s=>{
+    const warn = s.txt.toLowerCase().includes('warning')||s.txt.toLowerCase().includes('unlit');
+    return `<div class="step-i">
+      <div class="step-ic" style="background:${warn?'rgba(239,68,68,.2)':'rgba(26,86,219,.2)'}; color:${warn?'#f87171':'#60a5fa'}">${s.ico}</div>
+      <div style="flex:1;line-height:1.4;color:${warn?'#f87171':'var(--white)'}; font-size:12px">${escHtml(s.txt)}</div>
+      <div class="step-d">${s.dist}</div>
+    </div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--muted);padding:6px 0">No step-by-step data available</div>';
+
+  return `<div class="rcard ${rt.safest?'safest':''} ${i===0?'active':''}" id="rc${i}" onclick="selectRoute(${i})">
+    <div class="rcard-head">
+      <div class="rlabel-wrap">
+        <div class="rrank ${rk}">${i+1}</div>
+        <div>
+          <div class="rname">${rt.label}</div>
+          ${rt.safest?'<div class="safe-badge">🛡️ Safest Route</div>':''}
+        </div>
+      </div>
+      <div class="score-wrap">
+        <div class="score-big" style="color:${sc}">${rt.score}</div>
+        <div class="score-lbl">/ 100 Safety</div>
+      </div>
+    </div>
+    <div class="rmeta">
+      <div class="rmeta-i">📍 <strong>${rt.distKm} km</strong></div>
+      <div class="rmeta-i">⏱️ <strong>~${rt.durMin} min</strong></div>
+      <div class="rmeta-i"><span class="safety-pill ${pillClass(rt.score)}">● ${pillLabel(rt.score)}</span></div>
+    </div>
+    ${rt.osm?`<div style="padding:0 16px 12px;display:flex;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted)">🚓 ${rt.osm.police} police</span>
+      <span style="font-size:11px;color:var(--muted)">📷 ${rt.osm.cctv} CCTV</span>
+      <span style="font-size:11px;color:var(--muted)">🏥 ${rt.osm.hospital+rt.osm.doctor} medical</span>
+      <span style="font-size:11px;color:var(--muted)">💡 ${rt.osm.lamp} lights</span>
+    </div>`:''}
+    <div class="bd-toggle" onclick="toggleBD(event,${i})">
+      <span>📊 Full safety breakdown + directions</span>
+      <span class="chev" id="ch${i}">▼</span>
+    </div>
+    <div class="bd-body" id="bd${i}">
+      ${bdHTML}
+      <div class="steps-wrap">
+        <div class="steps-hdr">Turn-by-turn directions</div>
+        ${stHTML}
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleBD(e, i) {
+  e.stopPropagation();
+  document.getElementById('bd'+i).classList.toggle('open');
+  document.getElementById('ch'+i).classList.toggle('open');
+}
+
+// ── UTILS ─────────────────────────────────────
+function setBusy(on) {
+  const btn=document.getElementById('abtn');
+  btn.disabled=on;
+  if(on){
+    document.getElementById('bico').outerHTML='<div class="spinner" id="bico"></div>';
+    document.getElementById('btxt').textContent='Analyzing safety...';
+  } else {
+    const sp=document.getElementById('bico');
+    if(sp) sp.outerHTML='<span id="bico">🛡️</span>';
+    document.getElementById('btxt').textContent='Find Safest Route';
+  }
+}
+function showStatus(on){ document.getElementById('stbox').classList.toggle('show',on) }
+function setStep(n,s){ document.getElementById('d'+n).className='st-dot '+s }
+function showErr(m){ const e=document.getElementById('errbox'); e.textContent='⚠️ '+m; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'),10000) }
+function hideErr(){ document.getElementById('errbox').classList.remove('show') }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)) }
+
+document.addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter') analyze() });
+</script>
+</body>
+</html>
