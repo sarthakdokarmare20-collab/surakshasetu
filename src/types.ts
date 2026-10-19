@@ -1,0 +1,67 @@
+export type LngLat = [number, number] // GeoJSON order
+export type LatLng = [number, number]
+
+export interface Place { label: string; shortLabel: string; lat: number; lng: number; source: 'geocoder' | 'map-click' | 'search'; osmClass?: string; osmType?: string }
+
+export interface Step { instruction: string; name: string; distance: number; duration: number; maneuver: string; modifier?: string }
+
+export interface RouteResult {
+  id: string
+  /** Real geometry returned by the routing engine, GeoJSON order [lng,lat]. */
+  coords: LngLat[]
+  distance: number // metres
+  duration: number // seconds
+  steps: Step[]
+  weightName?: string
+}
+
+export type FacilityKind = 'police' | 'hospital' | 'cctv'
+export type DocTier = 'well-documented' | 'basic' | 'incomplete'
+export interface Facility {
+  id: string; kind: FacilityKind; lat: number; lng: number
+  name: string | null; tier: DocTier; osmUrl: string; tags: Record<string, string>
+}
+
+export interface RoadEnv {
+  ways: number
+  byClass: Record<string, number>
+  litYes: number; litNo: number; litUnknown: number
+  sidewalkTagged: number
+  sourceNote: string
+}
+
+export type FactorStatus = 'scored' | 'informational' | 'unavailable'
+export interface FactorResult {
+  key: string; label: string; status: FactorStatus
+  score: number | null // 0-100 where scored
+  weight: number
+  headline: string
+  detail: string[]
+  source: string
+  limitation: string
+}
+
+export interface RouteAnalysis {
+  routeId: string
+  factors: FactorResult[]
+  index: number | null // emergency-access / evidence index 0-100
+  confidence: number // 0-100, share of intended evidence actually available
+  confidenceLabel: 'Low' | 'Moderate' | 'High'
+  insufficient: boolean
+  nearbyPolice: (Facility & { distToRoute: number })[]
+  nearbyHospitals: (Facility & { distToRoute: number })[]
+  nearbyCctv: (Facility & { distToRoute: number })[]
+  maxGapPolice: number | null
+  maxGapHospital: number | null
+  caution: string | null
+}
+
+export interface Recommendation {
+  fastestId: string
+  shortestId: string
+  evidenceId: string | null
+  verdict: 'evidence-led' | 'inconclusive' | 'insufficient' | 'single-route'
+  text: string
+}
+
+export interface DataStatus { state: 'idle' | 'loading' | 'ok' | 'error'; message?: string }

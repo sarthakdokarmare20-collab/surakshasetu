@@ -1,0 +1,8 @@
+// Catalogue of crime-data sources that were reviewed. NONE is integrated into scoring because none provides
+// openly licensed, machine-readable data at street/route resolution. Last reviewed: see CONFIG.lastChecked.
+export interface CrimeSource { name: string; publisher: string; url: string; coverage: string; period: string; usable: string; checked: string }
+export const CRIME_SOURCES: CrimeSource[] = [
+  { name: 'Crime in India (city-wise tables for metropolitan cities)', publisher: 'National Crime Records Bureau (NCRB), Govt. of India', url: 'https://www.ncrb.gov.in', coverage: 'City level (Nagpur is one of the reported metropolitan cities)', period: 'Annual; latest edition covers 2023', usable: 'No for routes: city totals cannot be attributed to individual streets.', checked: '2026-10-19' },
+  { name: 'Nagpur City Police data dashboard: Crime Statistics', publisher: 'Nagpur City Police', url: 'https://dashboard.nagpurpolice.in/crime-statistics', coverage: 'City, zone and police-station jurisdiction; a GIS view of station-wise data is referenced', period: 'Sections span 2020–2025 (page shows “last updated April 13, 2026”)', usable: 'Not integrated: no download, API or open-data licence is stated (“All Rights Reserved”). Station-jurisdiction totals also cannot locate incidents on a specific road.', checked: '2026-10-19' },
+  { name: 'Open Government Data Platform India (data.gov.in)', publisher: 'Govt. of India', url: 'https://data.gov.in', coverage: 'Varies by dataset (mostly state/city aggregates)', period: 'Varies', usable: 'No route-level incident dataset for Nagpur identified.', checked: '2026-10-19' },
+]
