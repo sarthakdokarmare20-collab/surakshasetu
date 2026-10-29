@@ -38,7 +38,13 @@ async function newPage(viewport) {
     if (mode.osrm === 'noroute') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ code: 'NoRoute', message: 'Impossible route' }) })
     if (mode.osrm === 'down') return r.abort('failed')
     const m = new globalThis.URL(r.request().url()).pathname.split('/').pop().split(';').map(s => s.split(',').map(Number))
-    const a = [m[0][1], m[0][0]], b = [m[1][1], m[1][0]]
+    const a = [m[0][1], m[0][0]], b = [m[m.length - 1][1], m[m.length - 1][0]]
+    if (m.length === 3) { // route through an extra waypoint (synthetic smooth curve that passes through it; no out-and-back)
+      if (mode.osrm === 'single-noextra') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ code: 'NoRoute' }) })
+      const v = [m[1][1], m[1][0]]; const c = [2 * v[0] - (a[0] + b[0]) / 2, 2 * v[1] - (a[1] + b[1]) / 2]
+      const pts = []; for (let i = 0; i <= 30; i++) { const u = i / 30; pts.push([(1 - u) ** 2 * a[1] + 2 * u * (1 - u) * c[1] + u * u * b[1], (1 - u) ** 2 * a[0] + 2 * u * (1 - u) * c[0] + u * u * b[0]]) }
+      return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ code: 'Ok', routes: [mkRoute(pts, 1100 + Math.abs(v[1] - (a[1] + b[1]) / 2) * 1e4, 10500, 'Via Test Road')], waypoints: [] }) })
+    }
     const routes = [mkRoute(line(a, b, 0.002), 900, 9000, 'Fast Test Road')]
     if (mode.osrm === 'ok') routes.push(mkRoute(line(a, b, 0.02), 1200, 12000, 'Long Test Road'))
     r.fulfill({ contentType: 'application/json', body: JSON.stringify({ code: 'Ok', routes, waypoints: [{ location: m[0], name: 'Snap A', distance: 12 }, { location: m[1], name: 'Snap B', distance: 8 }] }) })
@@ -64,7 +70,9 @@ async function newPage(viewport) {
   await page.getByText('Dighori → Sadar').click()
   await page.waitForSelector('.rcard')
   assert.equal(await page.getByRole('textbox', { name: 'Start' }).inputValue(), 'Dighori'); ok('example journey resolves locality, not a POI (bank)')
-  assert.equal(await page.locator('.rcard').count(), 2); ok('two genuine routes rendered as cards')
+  await page.waitForFunction(() => document.querySelectorAll('.rcard').length >= 3, null, { timeout: 20000 })
+  assert.equal(await page.locator('.rcard').count(), 3); ok('three route options shown (2 native + 1 via-waypoint road route)')
+  await page.getByText('Extra route').first().waitFor(); ok('extra route is labelled')
   await page.waitForSelector('.leaflet-overlay-pane path.leaflet-interactive')
   assert.ok(await page.locator('.leaflet-overlay-pane path.leaflet-interactive').count() >= 2); ok('route polylines drawn on map')
   await page.getByText('Partial evidence').waitFor(); ok('partial-evidence disclosure shown')
@@ -75,6 +83,20 @@ async function newPage(viewport) {
   await page.getByRole('tab', { name: 'Directions' }).click()
   await page.getByText('Turn left onto Test Chowk Road').waitFor(); ok('turn-by-turn directions shown')
   await page.waitForTimeout(1300); await page.screenshot({ path: OUT + '/desktop.png' })
+  await page.locator('.rhead').nth(0).click()
+  await page.getByRole('button', { name: /Open full report/ }).click()
+  await page.getByRole('dialog', { name: 'Full route report' }).waitFor(); ok('full report opens')
+  const dlg = page.getByRole('dialog', { name: 'Full route report' })
+  await dlg.getByText('Test Hospital').first().waitFor(); await dlg.getByText('Test Police Station').first().waitFor(); ok('report lists hospital and police with names')
+  assert.ok(await dlg.locator('.strip-dot').count() >= 3); ok('route strip shows positions')
+  assert.ok(await dlg.locator('.tag.demo').count() > 0); ok('demo rows carry a Demo tag')
+  assert.ok(await dlg.getByRole('button', { name: /Print/ }).count() > 0); ok('print button present')
+  await page.screenshot({ path: OUT + '/report.png' })
+  await page.locator('.report-modal').click({ position: { x: 3, y: 3 } })
+  await page.getByLabel('Map layers').click(); await page.getByLabel('Demo placeholders where no real data').uncheck()
+  await page.getByRole('button', { name: /Open full report/ }).click()
+  await dlg.getByText('CCTV coverage data unavailable').waitFor(); await dlg.getByText('Insufficient verified data').first().waitFor(); assert.equal(await dlg.locator('.tag.demo').count(), 0); ok('demo off: report falls back to honest "unavailable / insufficient"')
+  await page.locator('.report-modal').click({ position: { x: 3, y: 3 } })
   await page.getByLabel('Methodology').click(); await page.getByText('How SurakshaSetu compares routes').waitFor(); ok('methodology modal opens')
   await page.keyboard.press('Escape'); await page.locator('.modal').click({ position: { x: 5, y: 5 } })
   await page.getByLabel('Community').click(); await page.getByText('Request community help').first().click(); await page.getByLabel('Feeling unsafe').check(); await page.getByLabel('Do not share location').check(); await page.getByText('Submit simulated request').click(); await page.getByText('SIMULATED').first().waitFor(); ok('simulated SOS flow still works')
@@ -87,8 +109,21 @@ async function newPage(viewport) {
 // 2. Single route
 { mode = { osrm: 'single', overpass: 'ok' }
   const { page } = await newPage({ width: 1366, height: 800 }); await page.goto(APP)
-  await page.getByText('Dighori → Wadi').click(); await page.waitForSelector('.rcard')
-  assert.equal(await page.locator('.rcard').count(), 1); await page.getByText('no genuine alternative').waitFor(); ok('single-route case: no alternatives fabricated'); await page.close() }
+  await page.getByText('Dighori → Wadi').click(); await page.waitForFunction(() => document.querySelectorAll('.rcard').length >= 2, null, { timeout: 20000 })
+  ok('engine returned 1 route: extra real routes found via waypoint'); await page.close() }
+{ mode = { osrm: 'single-noextra', overpass: 'ok' }
+  const { page } = await newPage({ width: 1366, height: 800 }); await page.goto(APP)
+  await page.getByText('Dighori → Wadi').click(); await page.waitForSelector('.rcard'); await page.getByText(/none were invented/).waitFor()
+  assert.equal(await page.locator('.rcard').count(), 1); ok('no extra route available: nothing fabricated, user told'); await page.close() }
+// user-supplied real data files override demo placeholders
+{ mode = { osrm: 'ok', overpass: 'ok' }
+  const { page } = await newPage({ width: 1366, height: 800 })
+  await page.route('**/data/cctv.json', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ lat: 21.125, lng: 79.102, name: 'Test cam', source: 'TEST survey' }]) }))
+  await page.route('**/data/crime.json', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ lat: 21.125, lng: 79.102, category: 'Test category', period: '2024', source: 'TEST police file' }]) }))
+  await page.goto(APP); await page.getByText('Dighori → Sadar').click(); await page.waitForFunction(() => document.querySelectorAll('.rcard').length >= 3, null, { timeout: 20000 })
+  await page.getByRole('button', { name: /Open full report/ }).click(); const dlg = page.getByRole('dialog', { name: 'Full route report' })
+  await dlg.getByText('Test category').waitFor(); await dlg.getByText('TEST police file').waitFor(); await dlg.getByText(/Supplied data file/).waitFor()
+  assert.equal(await dlg.locator('.tag.demo').count(), 0); ok('user-supplied CCTV/crime files shown as real (no Demo tag) with their source'); await page.close() }
 // 3. No route
 { mode = { osrm: 'noroute', overpass: 'ok' }
   const { page } = await newPage({ width: 1366, height: 800 }); await page.goto(APP)

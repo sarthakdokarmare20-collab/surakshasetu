@@ -22,6 +22,11 @@ export default function Methodology({ onClose }: { onClose: () => void }) {
       <li><b>Evidence-led route</b>: recommended over the fastest only if its index is at least {s.minIndexAdvantage} points higher and it costs ≤ {s.maxExtraMinutes} min and ≤ {s.maxExtraFraction * 100}% extra time. Otherwise the app reports that the evidence cannot separate the routes. Longer is never assumed safer.</li>
       <li>Amber marks a route with a data-supported caution (e.g. a stretch &gt; {s.gapCautionMeters / 1000} km from any mapped police station or hospital). Red is reserved for a verified hazard; no hazard dataset is connected, so it is never shown.</li>
     </ul>
+    <h4>Extra routes and demo placeholders</h4>
+    <ul>
+      <li><b>Extra routes:</b> if the engine returns fewer than three routes, it is asked for more road routes through one additional waypoint beside the straight line. Each is real OSRM road geometry; out-and-back, duplicate or absurd-detour candidates are discarded, and they are labelled “Extra route”.</li>
+      <li><b>Demo placeholders:</b> where no real CCTV or crime data exists, the report can show generated placeholder rows, always tagged “Demo” (toggle in Layers). They never enter the index, confidence or recommendation. Real data supplied in <code>public/data/*.json</code> replaces them and is shown with its stated source.</li>
+    </ul>
     <h4>Crime-data sources reviewed (last checked {CONFIG.lastChecked})</h4>
     <ul>{CRIME_SOURCES.map(c => <li key={c.name}><a href={c.url} target="_blank" rel="noreferrer">{c.name}</a>, {c.publisher}. <i>Coverage:</i> {c.coverage}. <i>Period:</i> {c.period}. <i>Status:</i> {c.usable}</li>)}</ul>
     <h4>Services &amp; attribution</h4>

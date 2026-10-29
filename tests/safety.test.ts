@@ -57,3 +57,16 @@ describe('safety analysis', () => {
   })
   it('handles a single route', () => { expect(recommend([near], [analyzeRoute({ route: near, facilities: facs, facilitiesLoaded: true, roadEnv: null })]).verdict).toBe('single-route') })
 })
+
+import { positionAlong, selfOverlapShare } from '../src/lib/geo'
+import { sampleCctv, sampleCrime } from '../src/services/sample'
+describe('along-route + demo data', () => {
+  const r = route('x', [[0, 0], [0.02, 0]], 600)
+  it('positionAlong gives km position', () => { const p = positionAlong([0.01, 0.0005], r.coords); expect(p.along).toBeGreaterThan(1050); expect(p.along).toBeLessThan(1150); expect(p.dist).toBeLessThan(60) })
+  it('out-and-back is detected', () => { expect(selfOverlapShare([[0, 0], [0.02, 0], [0, 0.0001]])).toBeGreaterThan(0.3); expect(selfOverlapShare(r.coords)).toBe(0) })
+  it('demo data is flagged and deterministic', () => { const a = sampleCctv(r), b = sampleCctv(r); expect(a).toEqual(b); expect(a.length).toBeGreaterThan(0); expect(a.every(x => x.sample)).toBe(true); expect(sampleCrime(r).every(c => c.sample)).toBe(true) })
+  it('annotates facilities with alongM', () => {
+    const an = analyzeRoute({ route: r, facilities: [fac('p', 'police', 0.01, 0.001)], facilitiesLoaded: true, roadEnv: null })
+    expect(an.nearbyPolice[0].alongM).toBeGreaterThan(1000)
+  })
+})

@@ -97,3 +97,43 @@ export function fmtDur(s: number) {
   if (m < 60) return `${m} min`
   return `${Math.floor(m / 60)} h ${m % 60} min`
 }
+
+/** Nearest point on a polyline: perpendicular distance (m) and distance travelled along the line (m) to that point. */
+export function positionAlong(p: LngLat, line: LngLat[]): { dist: number; along: number; point: LngLat } {
+  let best = { dist: Infinity, along: 0, point: line[0] as LngLat }
+  let cum = 0
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1]
+    const lat0 = p[1]
+    const [px, py] = project(p, lat0), [ax, ay] = project(a, lat0), [bx, by] = project(b, lat0)
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2))
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+    const seg = haversine(a, b)
+    if (d < best.dist) best = { dist: d, along: cum + seg * t, point: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] }
+    cum += seg
+  }
+  return best
+}
+
+/**
+ * Share of sampled points that lie close to an EARLIER, non-adjacent part of the same route (detects out-and-back spurs).
+ * Compares each sample with the earlier *line* (not earlier samples), so differing sample phase cannot hide a spur.
+ */
+export function selfOverlapShare(line: LngLat[], tol = 25, minGapSamples = 8): number {
+  const pts = samplePolyline(line, 100)
+  let hits = 0
+  for (let i = minGapSamples + 1; i < pts.length; i++) {
+    if (pointToPolyline(pts[i], pts.slice(0, i - minGapSamples)) <= tol) hits++
+  }
+  return pts.length ? hits / pts.length : 0
+}
+
+/** Point `frac` of the way along the straight line a→b, pushed sideways by `offsetM` (positive = left of travel direction). */
+export function offsetMidpoint(a: LngLat, b: LngLat, frac: number, offsetM: number): LngLat {
+  const lat0 = (a[1] + b[1]) / 2
+  const [ax, ay] = project(a, lat0), [bx, by] = project(b, lat0)
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1
+  const mx = ax + dx * frac + (-dy / len) * offsetM, my = ay + dy * frac + (dx / len) * offsetM
+  return [(mx / (R * Math.cos(rad(lat0)))) * (180 / Math.PI), (my / R) * (180 / Math.PI)]
+}

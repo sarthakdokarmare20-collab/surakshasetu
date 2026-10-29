@@ -1,6 +1,6 @@
 import { CONFIG } from '../config'
 import { fetchJson, HttpError } from '../lib/http'
-import { haversine, overlapShare, polylineLength } from '../lib/geo'
+import { haversine, offsetMidpoint, overlapShare, polylineLength, selfOverlapShare } from '../lib/geo'
 import type { LngLat, Place, RouteResult, Step } from '../types'
 
 interface OsrmStep { distance: number; duration: number; name: string; ref?: string; maneuver: { type: string; modifier?: string; exit?: number } }
@@ -85,4 +85,42 @@ export async function fetchRoutes(from: Place, to: Place, signal?: AbortSignal):
   if (kept.length === 1) notes.push('The routing engine returned only one route for this journey; no genuine alternative is available.')
   const uniqueNotes = [...new Set(notes)]
   return { routes: kept, snapped: { origin: oLoc, destination: dLoc, originSnapM, destinationSnapM, originRoad: wp[0]?.name || '', destinationRoad: wp[1]?.name || '' }, droppedDuplicates: dropped, notes: uniqueNotes }
+}
+
+/**
+ * If the engine returned fewer than `target` routes, look for additional GENUINE road routes by asking OSRM to route
+ * through one extra waypoint placed to the left/right of the straight line between the endpoints. Each candidate is a
+ * real OSRM road route; it is kept only if it is not a duplicate, has no out-and-back spur, and is not an absurd detour.
+ * Nothing is drawn client-side.
+ */
+export async function fetchExtraRoutes(from: Place, to: Place, existing: RouteResult[], target = 3, signal?: AbortSignal): Promise<{ routes: RouteResult[]; note?: string }> {
+  if (existing.length >= target) return { routes: [] }
+  const a: LngLat = [from.lng, from.lat], b: LngLat = [to.lng, to.lat]
+  const direct = haversine(a, b)
+  const bestDur = Math.min(...existing.map(r => r.duration)), bestDist = Math.min(...existing.map(r => r.distance))
+  // (fraction along the line, sideways offset as a share of the straight distance); positive = left
+  const tries: [number, number][] = [[0.5, 0.2], [0.5, -0.2], [0.4, 0.32], [0.6, -0.32], [0.5, 0.1], [0.5, -0.1]]
+  const found: RouteResult[] = []
+  let n = 0
+  for (const [frac, off] of tries) {
+    if (existing.length + found.length >= target || n >= 5) break
+    if (signal?.aborted) break
+    n++
+    const via = offsetMidpoint(a, b, frac, off * direct)
+    const url = `${CONFIG.osrmBase}/route/v1/driving/${a[0]},${a[1]};${via[0].toFixed(6)},${via[1].toFixed(6)};${b[0]},${b[1]}?overview=full&geometries=geojson&steps=true&continue_straight=false`
+    let data: OsrmResponse
+    try { data = await fetchJson<OsrmResponse>(url, { signal, timeoutMs: CONFIG.timeouts.osrmMs }) } catch { continue }
+    const r = data.routes?.[0]
+    if (data.code !== 'Ok' || !r) continue
+    if (r.duration > bestDur * 1.8 || r.distance > bestDist * 1.8) continue // absurd detour
+    const coords = r.geometry.coordinates
+    if (selfOverlapShare(coords) > 0.08) continue // out-and-back spur at the via point
+    const all = [...existing, ...found]
+    if (all.some(k => overlapShare(coords, k.coords) >= 0.88 && overlapShare(k.coords, coords) >= 0.88)) continue // same road as one we have
+    found.push({
+      id: `v${found.length + 1}`, viaNote: 'Additional road route found by routing through an extra waypoint', coords, distance: r.distance, duration: r.duration, weightName: r.weight_name,
+      steps: r.legs.flatMap(l => l.steps).map<Step>(s => ({ instruction: describeStep(s), name: s.name || s.ref || '', distance: s.distance, duration: s.duration, maneuver: s.maneuver.type, modifier: s.maneuver.modifier })),
+    })
+  }
+  return { routes: found, note: existing.length + found.length < target ? `Only ${existing.length + found.length} distinct road route(s) could be found for this journey; none were invented.` : undefined }
 }

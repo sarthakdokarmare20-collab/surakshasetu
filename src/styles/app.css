@@ -138,3 +138,33 @@ path.route-draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1s ease-ou
 }
 @media (min-width:761px){.swap{display:inline-grid}.planner-inputs{padding-right:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* demo tags, report, strip */
+.tag.demo{background:#fff4e0;color:#8a4b00;border:1px dashed #e3a24d;margin-left:4px;font-size:10px;padding:0 6px}
+.demo-note{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--mut);margin:6px 0 0;font-size:12px}
+.linkbtn{border:0;background:none;color:var(--blue);padding:0;text-decoration:underline;font-size:12px}
+.dot.crime{background:#e37400}.lg.crime{background:#e37400}
+.dot.demo{border-style:dashed;border-color:#fff;outline:1px dashed rgba(0,0,0,.35)}
+.dot.cctv{width:14px;height:14px;margin:4px;font-size:0}
+.btn.block{margin-top:0;margin-bottom:8px}
+.report{gap:14px}
+.report h4{margin:0 0 6px;font-size:15px}.report .count{display:inline-block;background:var(--blue-l);color:var(--blue-d);border-radius:999px;padding:0 8px;font-size:12px;margin-left:4px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.tiles>div{background:var(--bg);border-radius:10px;padding:10px;display:flex;flex-direction:column}
+.tiles b{font-size:20px;letter-spacing:-.02em}.tiles span{font-size:11.5px;color:var(--mut)}
+.tbl-wrap{overflow-x:auto}.tbl{width:100%;border-collapse:collapse;font-size:12.5px}.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;border-left:0;border-right:0;border-top:0}
+.tbl th{background:var(--bg);font-weight:600;color:var(--mut)}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:nowrap}.acts{white-space:nowrap}
+.acts .icon-btn{display:inline-grid;text-decoration:none;color:var(--mut)}
+.strip{border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.strip-axis{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut);margin-left:70px;margin-bottom:4px}
+.strip-lane{display:flex;align-items:center;gap:8px;height:24px}.strip-label{width:62px;font-size:12px;color:var(--mut)}
+.strip-track{position:relative;flex:1;height:4px;background:var(--bg);border-radius:2px}
+.strip-dot{position:absolute;top:50%;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.strip-dot.hospital{background:#0b8a7a}.strip-dot.police{background:#12263f}.strip-dot.cctv{background:#6b7280}.strip-dot.crime{background:#e37400}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}.strip-axis{margin-left:0}}
+@media print{
+  .app>.map,.app>.panel,.app>.map-actions,.app>.legend,.app>.toast,.noprint{display:none!important}
+  .modal{position:static;background:none;padding:0;display:block}
+  .sheet,.sheet.wide{box-shadow:none;max-height:none;overflow:visible;width:100%;padding:0}
+  body,html,#root,.app{height:auto;overflow:visible}
+  .report-modal{position:static}
+}

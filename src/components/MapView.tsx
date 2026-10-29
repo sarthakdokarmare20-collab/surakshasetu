@@ -4,7 +4,7 @@ import type L from 'leaflet'
 import { CONFIG } from '../config'
 import { dotIcon, pinIcon } from './Icons'
 import { fmtKm } from '../lib/geo'
-import type { Facility, RouteAnalysis, RouteResult, LngLat } from '../types'
+import type { CrimeRow, Facility, RouteAnalysis, RouteResult, LngLat } from '../types'
 
 const ll = (c: LngLat[]) => c.map(([lng, lat]) => [lat, lng] as [number, number])
 const TIER: Record<string, string> = { 'well-documented': 'Detailed OSM entry (not verified as operational)', basic: 'Basic OSM entry (name only)', incomplete: 'Incomplete OSM entry (no name)' }
@@ -21,6 +21,7 @@ interface Props {
   picking: 'origin' | 'dest' | null
   onPick: (lat: number, lng: number) => void
   facilities: ShownFacility[]
+  crime: CrimeRow[]
   fitKey: number
   insets: { left: number; bottom: number }
   onReady: (m: L.Map) => void
@@ -68,11 +69,12 @@ export default function MapView(p: Props) {
     <ZoomControl position="bottomright" />
     <Inner onReady={p.onReady} picking={p.picking} onPick={p.onPick} fitKey={p.fitKey} routes={p.routes} selectedId={p.selectedId} insets={p.insets} />
     {ordered.map(r => <RouteLine key={r.id + p.fitKey} r={r} selected={r.id === p.selectedId} caution={!!p.analyses[r.id]?.caution} onSelect={() => p.onSelect(r.id)} drawKey={p.fitKey} />)}
-    {p.facilities.map(f => <Marker key={f.kind + f.id} position={[f.lat, f.lng]} icon={dotIcon(f.kind, f.kind === 'police' ? '★' : f.kind === 'hospital' ? '+' : '·')}>
+    {p.facilities.map(f => <Marker key={f.kind + f.id} position={[f.lat, f.lng]} icon={dotIcon(f.kind + (f.sample ? ' demo' : ''), f.kind === 'police' ? '★' : f.kind === 'hospital' ? '+' : '')}>
       <Popup><b>{f.name || 'Unnamed ' + f.kind + ' (OSM)'}</b><br />
         <span className="pp-mut">{f.kind === 'police' ? 'Police station' : f.kind === 'hospital' ? 'Hospital' : 'Mapped camera location'}{f.distToRoute != null ? ` · ${fmtKm(f.distToRoute)} from route` : ''}</span><br />
-        <span className="pp-mut">{f.kind === 'cctv' ? 'Mapped location only: not confirmed operational.' : TIER[f.tier]}</span><br />
-        <a href={f.osmUrl} target="_blank" rel="noreferrer">Source: OpenStreetMap</a></Popup></Marker>)}
+        <span className="pp-mut">{f.sample ? 'Demo placeholder, not a real record.' : f.kind === 'cctv' ? 'Mapped / supplied location: not confirmed operational.' : TIER[f.tier]}</span><br />
+        {f.osmUrl && <a href={f.osmUrl} target="_blank" rel="noreferrer">Source: OpenStreetMap</a>}</Popup></Marker>)}
+    {p.crime.map(c => <Marker key={c.id} position={[c.lat, c.lng]} icon={dotIcon('crime' + (c.origin === 'demo' ? ' demo' : ''), '!')}><Popup><b>{c.category}</b><br /><span className="pp-mut">{c.period} · {c.origin === 'demo' ? 'Demo placeholder, not a real record' : c.source}</span></Popup></Marker>)}
     {p.origin && <Marker position={[p.origin.lat, p.origin.lng]} icon={pinIcon('start', 'A')} draggable eventHandlers={{ dragend: e => { const m = (e.target as L.Marker).getLatLng(); p.onDragEnd('origin', m.lat, m.lng) } }} zIndexOffset={1000}><Popup>Start. Drag to move.</Popup></Marker>}
     {p.destination && <Marker position={[p.destination.lat, p.destination.lng]} icon={pinIcon('end', 'B')} draggable eventHandlers={{ dragend: e => { const m = (e.target as L.Marker).getLatLng(); p.onDragEnd('dest', m.lat, m.lng) } }} zIndexOffset={1000}><Popup>Destination. Drag to move.</Popup></Marker>}
   </MapContainer>

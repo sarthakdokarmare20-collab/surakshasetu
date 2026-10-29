@@ -22,6 +22,12 @@ Other scripts: `npm run build`, `npm test` (unit tests), `npm run test:e2e` (bro
   - Red is reserved for verified hazards; none are connected, so it is never shown. Amber = a data-supported caution.
 - Community SOS and reports are **simulations kept in browser memory** (nothing is sent). `tel:112` links are real.
 
+## Report, extra routes and demo data
+- **Full report** (button on the selected route): counts and tables of hospitals and police stations within 1 km of the route (name, km from start, distance off route, coordinates, OSM link), CCTV points, crime records, and a strip showing where everything lies along the route. **Print / save PDF** included.
+- **3+ routes:** native OSRM alternatives first; if fewer than three, extra *real* road routes are requested via a side waypoint (filtered for duplicates, spurs and absurd detours; labelled "Extra route"). If none exist, none are shown.
+- **Your own real data:** put `public/data/cctv.json` and/or `public/data/crime.json` (formats in `public/data/README.md`). They are shown without a Demo tag, crediting your `source`.
+- **Demo placeholders:** with no real data, generated CCTV/crime rows can appear, always tagged "Demo"; toggle in the Layers menu. They are never used in the index, confidence or recommendation.
+
 ## Configuration (all optional, see `.env.example`)
 Weights, corridor widths and thresholds live in `src/config.ts`. Provider URLs can be overridden with `VITE_OSRM_URL`, `VITE_NOMINATIM_URL`, `VITE_OVERPASS_URLS`, `VITE_TILE_URL`, `VITE_CONTACT_EMAIL`. Nothing secret is used in the frontend.
 

@@ -1,13 +1,13 @@
 import { CONFIG } from '../config'
 import { CRIME_SOURCES } from '../data/sources'
-import { fmtKm, haversine, pointToPolyline, samplePolyline } from '../lib/geo'
-import type { Facility, FactorResult, LngLat, Recommendation, RoadEnv, RouteAnalysis, RouteResult } from '../types'
+import { fmtKm, haversine, positionAlong, samplePolyline } from '../lib/geo'
+import type { Facility, FactorResult, NearFacility, LngLat, Recommendation, RoadEnv, RouteAnalysis, RouteResult } from '../types'
 
 type Cfg = typeof CONFIG.safety
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
 const round = (x: number) => Math.round(x)
 
-export interface AnalysisInput { route: RouteResult; facilities: Facility[]; facilitiesLoaded: boolean; roadEnv: RoadEnv | null; roadPending?: boolean }
+export interface AnalysisInput { route: RouteResult; facilities: Facility[]; facilitiesLoaded: boolean; roadEnv: RoadEnv | null; roadPending?: boolean; userCrime?: { rows: { lat: number; lng: number }[]; source: string } }
 
 function nearestDist(p: LngLat, list: Facility[]): number {
   let best = Infinity
@@ -34,13 +34,13 @@ function proximityFactor(key: 'police' | 'hospital', label: string, samples: Lng
 }
 
 export function analyzeRoute(input: AnalysisInput, cfg: Cfg = CONFIG.safety): RouteAnalysis {
-  const { route, facilities, facilitiesLoaded, roadEnv, roadPending } = input
+  const { route, facilities, facilitiesLoaded, roadEnv, roadPending, userCrime } = input
   const samples = samplePolyline(route.coords, cfg.sampleEveryMeters)
   const police = facilities.filter(f => f.kind === 'police')
   const hosp = facilities.filter(f => f.kind === 'hospital')
   const cctv = facilities.filter(f => f.kind === 'cctv')
 
-  const withDist = (list: Facility[], max: number) => list.map(f => ({ ...f, distToRoute: pointToPolyline([f.lng, f.lat], route.coords) })).filter(f => f.distToRoute <= max).sort((a, b) => a.distToRoute - b.distToRoute)
+  const withDist = (list: Facility[], max: number): NearFacility[] => list.map(f => { const p = positionAlong([f.lng, f.lat], route.coords); return { ...f, distToRoute: p.dist, alongM: p.along } }).filter(f => f.distToRoute <= max).sort((a, b) => a.alongM - b.alongM)
   const nearbyPolice = withDist(police, cfg.corridorMeters)
   const nearbyHospitals = withDist(hosp, cfg.corridorMeters)
   const nearbyCctv = withDist(cctv, 100)
@@ -63,8 +63,12 @@ export function analyzeRoute(input: AnalysisInput, cfg: Cfg = CONFIG.safety): Ro
   }
 
   // Crime
-  const crimeF: FactorResult = { key: 'crime', label: 'Historical crime', status: 'unavailable', score: null, weight: cfg.weights.crime, headline: 'Insufficient verified data',
-    detail: ['Reviewed sources publish city / police-station-level totals only, with no open licence or street-level locations. Converting them into route-level predictions would be misleading, so none are used.', ...CRIME_SOURCES.map(s => `${s.publisher}: ${s.name}. ${s.coverage}. Checked ${s.checked}.`)],
+  const nearCrime = userCrime ? userCrime.rows.filter(r => positionAlong([r.lng, r.lat], route.coords).dist <= 300).length : 0
+  const crimeF: FactorResult = userCrime && userCrime.rows.length
+    ? { key: 'crime', label: 'Historical crime', status: 'informational', score: null, weight: cfg.weights.crime, headline: `${nearCrime} record(s) within 300 m of this route (${userCrime.source})`,
+        detail: ['Records come from the data file supplied with this deployment (public/data/crime.json). Completeness and accuracy depend on that source.', 'Not used in the index: coverage and reporting bias are unknown.'], source: userCrime.source, limitation: 'Counts are not rates; absence of records is not evidence of safety.' }
+    : { key: 'crime', label: 'Historical crime', status: 'unavailable', score: null, weight: cfg.weights.crime, headline: 'Insufficient verified data',
+    detail: ['Reviewed sources publish city / police-station-level totals only, with no open licence or street-level locations. Converting them into route-level predictions would be misleading, so none are used.', ...CRIME_SOURCES.map(x => `${x.publisher}: ${x.name}. ${x.coverage}. Checked ${x.checked}.`)],
     source: 'NCRB; Nagpur City Police dashboard; data.gov.in (see Methodology)', limitation: 'Missing data is treated as unknown, not as evidence that the route is safe or unsafe.' }
 
   // Road environment
@@ -91,7 +95,7 @@ export function analyzeRoute(input: AnalysisInput, cfg: Cfg = CONFIG.safety): Ro
   // Confidence: each of the 5 evidence types contributes up to 1 point. Crowd-sourced (OSM-only) evidence counts 0.5,
   // official/verified evidence would count 1. So an OSM-only analysis can never exceed 50%.
   const credit = (f: FactorResult, officialCredit: number) => (f.status === 'unavailable' ? 0 : officialCredit)
-  const confidence = round((credit(p.f, 0.5) + credit(h.f, 0.5) + credit(cctvF, 0.5) + credit(crimeF, 1) + credit(roadF, 0.5)) / 5 * 100)
+  const confidence = round((credit(p.f, 0.5) + credit(h.f, 0.5) + credit(cctvF, 0.5) + credit(crimeF, 0.5) + credit(roadF, 0.5)) / 5 * 100)
   const confidenceLabel = confidence < 40 ? 'Low' : confidence < 70 ? 'Moderate' : 'High'
 
   const gaps: string[] = []
