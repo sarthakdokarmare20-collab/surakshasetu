@@ -28,6 +28,13 @@ Other scripts: `npm run build`, `npm test` (unit tests), `npm run test:e2e` (bro
 - **Your own real data:** put `public/data/cctv.json` and/or `public/data/crime.json` (formats in `public/data/README.md`). They are shown without a Demo tag, crediting your `source`.
 - **Demo placeholders:** with no real data, generated CCTV/crime rows can appear, always tagged "Demo"; toggle in the Layers menu. They are never used in the index, confidence or recommendation.
 
+## Making police/hospital data instant and reliable (recommended before a presentation)
+The public Overpass servers are sometimes slow. Download the real OpenStreetMap data for Nagpur once:
+
+    npm run fetch-data
+
+This writes `public/data/osm-nagpur.json` (police stations, hospitals, mapped cameras; © OpenStreetMap contributors). The app then uses it instantly with no live query. Commit the file so the GitHub Pages site uses it too. Re-run occasionally to refresh. Without it, the app queries Overpass live (all mirrors in parallel, 3 automatic attempts).
+
 ## Configuration (all optional, see `.env.example`)
 Weights, corridor widths and thresholds live in `src/config.ts`. Provider URLs can be overridden with `VITE_OSRM_URL`, `VITE_NOMINATIM_URL`, `VITE_OVERPASS_URLS`, `VITE_TILE_URL`, `VITE_CONTACT_EMAIL`. Nothing secret is used in the frontend.
 

@@ -20,7 +20,7 @@ function proximityFactor(key: 'police' | 'hospital', label: string, samples: Lng
   const scoring = all.filter(f => f.tier !== 'incomplete') // unnamed OSM entries are shown but not scored
   const source = 'OpenStreetMap via Overpass API (crowd-sourced; © OpenStreetMap contributors, ODbL)'
   const limitation = `Straight-line distance, not travel time. Depends on OSM completeness; says nothing about staffing, opening hours or response times. Proximity does not guarantee assistance.`
-  if (!loaded) return { f: { key, label, status: 'unavailable', score: null, weight: cfg.weights[key], headline: 'Data could not be loaded', detail: ['The map-data service (Overpass) was unreachable, so facilities could not be assessed.'], source, limitation }, maxGap: null }
+  if (!loaded) return { f: { key, label, status: 'unavailable', score: null, weight: cfg.weights[key], headline: 'Not loaded yet', detail: ['The map-data service did not respond yet.'], source, limitation }, maxGap: null }
   if (!scoring.length) return { f: { key, label, status: 'unavailable', score: null, weight: cfg.weights[key], headline: `No named ${noun} mapped in the search area`, detail: ['This reflects what is mapped in OSM, not proof that none exist.'], source, limitation }, maxGap: null }
   const ds = samples.map(p => nearestDist(p, scoring))
   const mean = ds.reduce((a, b) => a + b, 0) / ds.length

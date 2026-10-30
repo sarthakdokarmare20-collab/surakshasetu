@@ -4,7 +4,7 @@ import { fmtDur, fmtKm } from '../lib/geo'
 import type { NearFacility, RouteAnalysis, RouteResult } from '../types'
 import type { ReportData } from '../services/reportData'
 
-interface Props { route: RouteResult; routeName: string; analysis: RouteAnalysis | undefined; data: ReportData; from: string; to: string; analysisReady: boolean; onFocus: (lat: number, lng: number) => void; onClose: () => void }
+interface Props { route: RouteResult; routeName: string; analysis: RouteAnalysis | undefined; data: ReportData; from: string; to: string; analysisReady: boolean; dataNote?: string; onFocus: (lat: number, lng: number) => void; onClose: () => void }
 
 const km = (m: number) => (m / 1000).toFixed(1)
 const Demo = () => <span className="tag demo" title="Placeholder data for demonstration; not a real record">Demo</span>
@@ -33,7 +33,7 @@ function FacTable({ title, prefix, rows, empty, onFocus }: { title: string; pref
     </tbody></table></div>}</section>
 }
 
-export default function RouteReport({ route, routeName, analysis, data, from, to, analysisReady, onFocus, onClose }: Props) {
+export default function RouteReport({ route, routeName, analysis, data, from, to, analysisReady, dataNote, onFocus, onClose }: Props) {
   const police = analysis?.nearbyPolice ?? [], hosp = analysis?.nearbyHospitals ?? []
   const cctvDemo = data.cctv.some(c => c.origin === 'demo'), crimeDemo = data.crimeOrigin === 'demo'
   const crimeFactor = analysis?.factors.find(f => f.key === 'crime')
@@ -50,7 +50,7 @@ export default function RouteReport({ route, routeName, analysis, data, from, to
     {(cctvDemo || crimeDemo) && <p className="demo-note"><Demo /> CCTV and/or crime rows marked “Demo” are placeholders for demonstration. They are not real records and are excluded from the index and confidence.</p>}
 
     <section><h4>Where things are along the route</h4><Strip route={route} analysis={analysis} data={data} /></section>
-    {!analysisReady && <p className="notice warn">Police and hospital data is still loading or could not be loaded; those tables fill in when it arrives.</p>}
+    {!analysisReady && <p className="mut small">Police and hospital tables fill in as soon as the map data arrives (use Retry in the panel if it doesn’t).</p>}
     <FacTable title="Hospitals" prefix="H" rows={hosp} empty="No hospitals mapped within the corridor (OpenStreetMap may be incomplete)." onFocus={onFocus} />
     <FacTable title="Police stations" prefix="P" rows={police} empty="No police stations mapped within the corridor (OpenStreetMap may be incomplete)." onFocus={onFocus} />
 
@@ -70,7 +70,7 @@ export default function RouteReport({ route, routeName, analysis, data, from, to
         </tbody></table></div>}</section>
 
     <section><h4>Notes</h4><ul className="small mut">
-      <li>Hospitals and police stations are OpenStreetMap entries within {CONFIG.safety.corridorMeters / 1000} km of the route line; they are not verified as open, staffed or able to respond. Proximity does not guarantee assistance.</li>
+      <li>Facility data: {dataNote ?? 'OpenStreetMap'}. Hospitals and police stations are OpenStreetMap entries within {CONFIG.safety.corridorMeters / 1000} km of the route line; they are not verified as open, staffed or able to respond. Proximity does not guarantee assistance.</li>
       <li>Emergency-access index: {analysis?.index ?? 'n/a'} · data confidence: {analysis ? analysis.confidenceLabel : 'n/a'}. This is partial evidence, not an overall safety score.</li>
       <li>Map data © OpenStreetMap contributors. Routing: OSRM. In danger, call 112.</li></ul></section>
   </div></div>

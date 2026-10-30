@@ -44,6 +44,7 @@ export default function App() {
   const [resolving, setResolving] = useState(false)
   const [modal, setModal] = useState<null | 'method' | 'community' | 'sos' | 'report' | 'fullreport'>(null)
   const [scenarioNote, setScenarioNote] = useState('')
+  const [facilityOrigin, setFacilityOrigin] = useState<{ origin: 'live' | 'snapshot'; fetchedAt: string } | null>(null)
   const [extrasLoading, setExtrasLoading] = useState(false)
   const [userData, setUserData] = useState<UserData | null>(null)
   const userRef = useRef<UserData | null>(null)
@@ -64,7 +65,7 @@ export default function App() {
   const publish = useCallback((out: RoutingOutcome, facilities: Facility[], loaded: boolean, envs: Record<string, RoadEnv | null>, roadPending: boolean) => {
     const list = out.routes.map(route => analyzeRoute({ route, facilities, facilitiesLoaded: loaded, roadEnv: envs[route.id] ?? null, roadPending: roadPending && !(route.id in envs), userCrime: userRef.current?.crime.length ? { rows: userRef.current.crime, source: userRef.current.crimeSource } : undefined }))
     setAnalyses(Object.fromEntries(list.map(a => [a.routeId, a])))
-    setRec(recommend(out.routes, list))
+    setRec(loaded ? recommend(out.routes, list) : null)
   }, [])
 
   /**
@@ -77,12 +78,12 @@ export default function App() {
     setAnalysisStatus({ state: 'loading' }); setRoadStatus({ state: 'idle' })
     let facilities: Facility[] = []; let loaded = false
     try {
-      try {
-        const r = await fetchFacilities(bbox(out.routes.map(x => x.coords), 4000), signal)
-        facilities = r.facilities; loaded = true
-      } catch (e) {
+      const box = bbox(out.routes.map(x => x.coords), 4000)
+      for (let attempt = 0; attempt < 3 && !loaded; attempt++) { // auto-retry with a short back-off before giving up
+        if (attempt) { setAnalysisStatus({ state: 'loading', message: 'Live map data is slow, retrying…' }); await new Promise(r => setTimeout(r, attempt * CONFIG.retryBackoffMs)) }
         if (signal.aborted) return
-        setAnalysisStatus({ state: 'error', message: 'Police, hospital and CCTV data could not be loaded: ' + (e as Error).message })
+        try { const r = await fetchFacilities(box, signal); facilities = r.facilities; loaded = true; setFacilityOrigin({ origin: r.origin, fetchedAt: r.fetchedAt }) }
+        catch (e) { if (signal.aborted) return; if (attempt === 2) setAnalysisStatus({ state: 'error', message: (e as Error).message }) }
       }
       if (signal.aborted) return
       facsRef.current = facilities
@@ -231,23 +232,23 @@ export default function App() {
         </section>
 
         {(resolving || routeStatus.state === 'loading') && <div className="state" role="status"><Loader2 className="spin" size={18} />{resolving ? 'Locating places…' : 'Finding real road routes…'}</div>}
-        {scenarioNote && <p className="notice warn small" role="status"><AlertTriangle size={14} />{scenarioNote}</p>}
+        {scenarioNote && <p className="mut small" role="status">{scenarioNote} <button className="linkbtn" onClick={() => setScenarioNote('')}>Dismiss</button></p>}
         {routeStatus.state === 'error' && <div className="state err" role="alert"><AlertTriangle size={18} /><div><b>Couldn’t get routes</b><p>{routeStatus.message}</p>{origin && dest && <button className="btn" onClick={() => plan(origin, dest)}>Try again</button>}</div></div>}
         {!hasRoutes && routeStatus.state === 'idle' && !resolving && <div className="empty"><ShieldAlert size={22} /><p>Choose a start and destination, or try an example journey. Routes follow the real road network; safety evidence is measured along each route and missing data is always disclosed.</p></div>}
 
         {hasRoutes && fastest && <>
           {rec && <div className={'rec ' + rec.verdict}><b>{rec.verdict === 'evidence-led' ? 'Evidence-based comparison' : rec.verdict === 'inconclusive' ? 'Evidence is inconclusive' : rec.verdict === 'insufficient' ? 'Insufficient data' : 'Single route'}</b><p>{rec.text}</p></div>}
           {extrasLoading && <div className="state" role="status"><Loader2 className="spin" size={16} />Looking for more route options…</div>}
-          {analysisStatus.state === 'loading' && !extrasLoading && <div className="state" role="status"><Loader2 className="spin" size={16} />Loading police, hospital and CCTV data…</div>}
+          {analysisStatus.state === 'loading' && !extrasLoading && <div className="state" role="status"><Loader2 className="spin" size={16} />{analysisStatus.message || 'Loading police, hospital and CCTV data…'}</div>}
           {analysisStatus.state !== 'loading' && roadStatus.state === 'loading' && <p className="mut small" role="status"><Loader2 className="spin" size={12} style={{ verticalAlign: '-2px' }} /> Loading optional road details…</p>}
-          {(analysisStatus.message || roadStatus.message) && analysisStatus.state !== 'loading' && <div className="state warn" role="status"><AlertTriangle size={16} /><div><p>{[analysisStatus.message, roadStatus.state === 'error' ? roadStatus.message : ''].filter(Boolean).join(' ')}</p><p className="small">Your routes and directions are unaffected.</p><button className="btn" onClick={() => { if (!outcome) return; abortRef.current?.abort(); const ac = new AbortController(); abortRef.current = ac; void runAnalysis(outcome, ac.signal) }}>Retry data</button></div></div>}
+          {analysisStatus.state === 'error' && <p className="mut small" role="status">Live police/hospital data didn’t load (your routes are fine). <button className="linkbtn" onClick={() => { if (!outcome) return; abortRef.current?.abort(); const ac = new AbortController(); abortRef.current = ac; void runAnalysis(outcome, ac.signal) }}>Retry</button></p>}
           <div className="routes" role="radiogroup" aria-label="Route options">
             {outcome!.routes.map((r, i) => { const a = analyses[r.id]; const sel = r.id === selectedId; return <div key={r.id} className={'rcard' + (sel ? ' sel' : '')}>
               <button className="rhead" role="radio" aria-checked={sel} onClick={() => setSelectedId(r.id)}>
                 <div className="rtime"><b>{fmtDur(r.duration)}</b><span>{fmtKm(r.distance)}</span></div>
                 <div className="rmeta"><div className="rtitle">Route {i + 1}{r.viaNote && <span className="tag" title={r.viaNote}>Extra route</span>}{badges(r.id).map(b => <span key={b} className={'tag ' + (b === 'Strongest evidence' ? 'blue' : '')}>{b}</span>)}</div>
                   <span className="mut small">{delta(r, fastest)}</span>
-                  <span className="rev">{a ? (a.index != null ? `Emergency-access index ${a.index} · confidence ${a.confidenceLabel}` : 'Insufficient data for a reliable comparison') : analysisState === 'loading' ? 'Analysing evidence…' : 'Evidence unavailable'}</span>
+                  <span className="rev">{a ? (a.index != null ? `Emergency-access index ${a.index} · confidence ${a.confidenceLabel}` : 'Safety index pending') : analysisState === 'loading' ? 'Analysing evidence…' : 'Evidence unavailable'}</span>
                   {a?.caution && <span className="caution"><AlertTriangle size={12} />Data-supported caution</span>}</div>
               </button>
               {sel && <div className="rbody">
@@ -279,7 +280,7 @@ export default function App() {
     </div>
     {shown.length > 0 && <div className="legend" aria-label="Map legend"><span><i className="lg police" />Police (OSM)</span><span><i className="lg hospital" />Hospital (OSM)</span>{layers.cctv && <span><i className="lg cctv" />CCTV point</span>}{layers.crime && reportData && reportData.crime.length > 0 && <span><i className="lg crime" />Crime record</span>}</div>}
 
-    {modal === 'fullreport' && selected && reportData && <RouteReport route={selected} routeName={`Route ${(outcome?.routes.findIndex(r => r.id === selected.id) ?? 0) + 1}`} analysis={analyses[selected.id]} data={reportData} from={origin?.shortLabel ?? 'Start'} to={dest?.shortLabel ?? 'Destination'} analysisReady={!!analyses[selected.id]} onFocus={focusOn} onClose={() => setModal(null)} />}
+    {modal === 'fullreport' && selected && reportData && <RouteReport route={selected} routeName={`Route ${(outcome?.routes.findIndex(r => r.id === selected.id) ?? 0) + 1}`} analysis={analyses[selected.id]} data={reportData} from={origin?.shortLabel ?? 'Start'} to={dest?.shortLabel ?? 'Destination'} analysisReady={!!analyses[selected.id] && analysisStatus.state !== 'error'} dataNote={facilityOrigin ? (facilityOrigin.origin === 'snapshot' ? `OpenStreetMap snapshot downloaded ${new Date(facilityOrigin.fetchedAt).toLocaleDateString()}` : 'OpenStreetMap, live query') : undefined} onFocus={focusOn} onClose={() => setModal(null)} />}
     {modal === 'method' && <Methodology onClose={() => setModal(null)} />}
     {modal === 'community' && <CommunityModal onClose={() => setModal(null)} sess={sess} setSess={setSess} reports={reports} setReports={setReports} openSos={() => setModal('sos')} openReport={() => setModal('report')} say={say} />}
     {modal === 'sos' && <SosModal onClose={() => setModal(null)} onSubmit={s => { setSess(s); setModal('community'); say('Simulated request ' + s.id + ' created') }} />}

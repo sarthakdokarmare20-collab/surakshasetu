@@ -135,15 +135,15 @@ async function newPage(viewport) {
 // 5. Overpass down: routes still shown
 { mode = { osrm: 'ok', overpass: 'down' }
   const { page, errors } = await newPage({ width: 1366, height: 800 }); await page.goto(APP)
-  await page.getByText('Dighori → Sadar').click(); await page.waitForSelector('.rcard'); await page.getByText('Retry data').waitFor()
-  await page.getByText('Insufficient data for a reliable').first().waitFor(); assert.deepEqual(errors, []); ok('Overpass failure degrades gracefully, routes intact'); await page.close() }
+  await page.getByText('Dighori → Sadar').click(); await page.waitForSelector('.rcard'); await page.getByRole('button', { name: 'Retry' }).waitFor({ timeout: 60000 })
+  assert.equal(await page.locator('.state.warn, .notice.warn').count(), 0); assert.equal(await page.getByText('Insufficient data').count(), 0); assert.deepEqual(errors, []); ok('Overpass failure: slim retry line only, no yellow boxes, routes intact'); await page.close() }
 // 5b. Overpass never answers: spinner must end, routes intact
 { mode = { osrm: 'ok', overpass: 'hang' }
   const { page } = await newPage({ width: 1366, height: 800 }); await page.goto(APP)
   await page.getByText('Dighori → Sadar').click(); await page.waitForSelector('.rcard')
-  await page.getByText('Retry data').waitFor({ timeout: 45000 })
+  await page.getByRole('button', { name: 'Retry' }).waitFor({ timeout: 90000 })
   assert.equal(await page.locator('.skeleton').count(), 0); assert.equal(await page.locator('.spin').count(), 0)
-  await page.getByText('Insufficient data for a reliable').first().waitFor(); await page.getByRole('tab', { name: 'Directions' }).click(); await page.getByText('Turn left onto Test Chowk Road').waitFor()
+  assert.equal(await page.locator('.state.warn, .notice.warn').count(), 0); await page.getByRole('tab', { name: 'Directions' }).click(); await page.getByText('Turn left onto Test Chowk Road').waitFor()
   ok('hung Overpass: loading ends via timeout, directions still work'); await page.close() }
 // 5c. Only the optional road query hangs: analysis shows immediately
 { mode = { osrm: 'ok', overpass: 'hang-road' }
@@ -152,6 +152,15 @@ async function newPage(viewport) {
   await page.getByText('Partial evidence').waitFor({ timeout: 15000 }); assert.equal(await page.locator('.skeleton').count(), 0)
   ok('safety evidence shown without waiting for optional road data')
   await page.waitForFunction(() => !document.body.innerText.includes('Loading optional road details'), null, { timeout: 60000 }); ok('optional road loading finishes after timeouts'); await page.close() }
+// 5d. Downloaded real-data snapshot is used instantly, even when live Overpass is down
+{ mode = { osrm: 'ok', overpass: 'down' }
+  const { page } = await newPage({ width: 1366, height: 800 })
+  await page.route('**/data/osm-nagpur.json', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ fetchedAt: '2026-10-30T00:00:00Z', bbox: { south: 20, west: 78, north: 22, east: 80 }, elements: [
+    { type: 'node', id: 11, lat: 21.12, lon: 79.10, tags: { amenity: 'police', name: 'Snapshot Police Station' } }, { type: 'node', id: 12, lat: 21.14, lon: 79.09, tags: { amenity: 'hospital', name: 'Snapshot Hospital' } } ] }) }))
+  await page.goto(APP); await page.getByText('Dighori → Sadar').click(); await page.waitForFunction(() => document.querySelectorAll('.rcard').length >= 3, null, { timeout: 20000 })
+  await page.getByRole('button', { name: /Open full report/ }).click(); const dlg = page.getByRole('dialog', { name: 'Full route report' })
+  await dlg.getByText('Snapshot Hospital').first().waitFor(); await dlg.getByText('Snapshot Police Station').first().waitFor(); await dlg.getByText(/snapshot downloaded/).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Retry' }).count(), 0); ok('snapshot data shown instantly with live Overpass down'); await page.close() }
 // 6. Mobile + pick on map
 { mode = { osrm: 'ok', overpass: 'ok' }
   const { page } = await newPage({ width: 390, height: 800 }); await page.goto(APP)

@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronDown, ExternalLink, Info } from 'lucide-react'
 import { fmtDur, fmtKm } from '../lib/geo'
 import type { FactorResult, RouteAnalysis, RouteResult } from '../types'
 
-const STATUS_LABEL: Record<FactorResult['status'], string> = { scored: 'Used in index', informational: 'Information only', unavailable: 'Unavailable' }
+const STATUS_LABEL: Record<FactorResult['status'], string> = { scored: 'Used in index', informational: 'Information only', unavailable: 'No data' }
 
 function Meter({ value, label, tone }: { value: number | null; label: string; tone: 'blue' | 'grey' }) {
   return <div className="meter"><div className="meter-top"><span>{label}</span><b>{value == null ? 'n/a' : value}</b></div><div className={'meter-bar ' + tone}><i style={{ width: (value ?? 0) + '%' }} /></div></div>
@@ -28,11 +28,11 @@ function Factor({ f }: { f: FactorResult }) {
 
 export function SafetyDetail({ a, analysisState }: { a: RouteAnalysis | undefined; analysisState: 'loading' | 'ok' | 'error' | 'idle' }) {
   if (analysisState === 'loading' || (!a && analysisState === 'idle')) return <div className="skeleton-wrap" aria-busy="true"><div className="skeleton" /><div className="skeleton" /><div className="skeleton short" /><p className="mut">Loading police, hospital and road data from OpenStreetMap…</p></div>
-  if (!a) return <p className="notice warn"><AlertTriangle size={16} />Safety evidence could not be loaded. The route above is unaffected.</p>
+  if (!a) return <p className="notice info"><Info size={16} />Safety evidence hasn’t loaded yet. The route itself is unaffected.</p>
   const crimeMissing = a.factors.find(f => f.key === 'crime')?.status === 'unavailable'
   return <div className="safety">
     {a.insufficient
-      ? <p className="notice warn"><AlertTriangle size={16} /><span><b>Insufficient data for a reliable safety comparison.</b> Fewer than two usable evidence factors are available for this route.</span></p>
+      ? <p className="notice info"><Info size={16} /><span>Safety index appears once police and hospital data has loaded.</span></p>
       : crimeMissing && <p className="notice info"><Info size={16} /><span><b>Partial evidence.</b> The index below reflects mapped police and hospital proximity only. Crime and CCTV are not verified, so this is <u>not</u> an overall safety score.</span></p>}
     {a.caution && <p className="notice amber"><AlertTriangle size={16} />{a.caution}</p>}
     <div className="meters"><Meter value={a.index} label="Emergency-access index" tone="blue" /><Meter value={a.confidence} label={`Data confidence · ${a.confidenceLabel}`} tone="grey" /></div>
